@@ -888,7 +888,7 @@ function renderTelaLogin(){
         const cidade = document.getElementById('in-cidade').value.trim();
         if(!nome){ msg.style.color='#C0392B'; msg.textContent = 'Informe seu nome.'; return; }
         const { data, error } = await sb.from('alunos').insert({nome, email, senha, cidade}).select().single();
-        if(error){ msg.style.color='#C0392B'; msg.textContent = 'Erro: ' + error.message + ' (código: ' + (error.code||'?') + ')'; console.error(error); return; }
+        if(error){ msg.style.color='#C0392B'; msg.textContent = error.message.includes('duplicate') ? 'Esse e-mail já tem cadastro.' : 'Erro ao cadastrar.'; return; }
         ALUNO = {id:data.id, nome:data.nome, email:data.email, cidade:data.cidade};
       } else {
         const { data, error } = await sb.from('alunos').select('*').eq('email', email).eq('senha', senha).single();
