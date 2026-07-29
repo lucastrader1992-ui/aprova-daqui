@@ -1023,6 +1023,7 @@ async function iniciarApp(){
       document.querySelectorAll('.trilha-btn').forEach(b=>b.classList.toggle('active', b.dataset.trilha===trilhaAtual));
       filtroMateria = 'Todas';
       filtroMateriaMaterial = 'Todas';
+      topicoSelecionadoMaterial = null;
       if(paginaAtual==='redacao' && trilhaAtual!=='enem'){ paginaAtual = 'painel'; setPage('painel'); return; }
       render();
     });
@@ -1115,14 +1116,14 @@ function renderPainel(main){
 
 /* ---------- MATERIAL DE ESTUDO ---------- */
 let filtroMateriaMaterial = 'Todas';
+let topicoSelecionadoMaterial = null;
 function renderMaterial(main){
   const materialTrilha = MATERIAL_ESTUDO.filter(m=>m.trilha===trilhaAtual);
   const materias = ['Todas', ...new Set(materialTrilha.map(m=>m.materia))];
-  const lista = filtroMateriaMaterial==='Todas' ? materialTrilha : materialTrilha.filter(m=>m.materia===filtroMateriaMaterial);
 
   main.innerHTML = `
     <div class="page-title">Material de Estudo — ${TRILHAS[trilhaAtual].nome}</div>
-    <div class="page-sub">Resumo direto por assunto + atalho pra buscar videoaulas gratuitas sobre o tema.</div>
+    <div class="page-sub">Escolha a disciplina, depois clique no tópico para ver o material completo.</div>
     ${trilhaAtual==='enem' ? `
       <div class="card" style="background:var(--board); color:#fff; border:none;">
         <h3 style="color:#fff;">📄 Provas oficiais anteriores (fonte confiável)</h3>
@@ -1132,22 +1133,63 @@ function renderMaterial(main){
     ` : ''}
     <div class="filter-row">
       <select id="sel-materia-material">
-        ${materias.map(m=>`<option ${m===filtroMateriaMaterial?'selected':''}>${m}</option>`).join('')}
+        ${materias.filter(m=>m!=='Todas').map(m=>`<option ${m===filtroMateriaMaterial?'selected':''}>${m}</option>`).join('')}
       </select>
     </div>
-    <div id="lista-material"></div>
+    <div id="lista-topicos-material"></div>
+    <div id="material-topico-selecionado"></div>
   `;
+
+  // Se ainda não tem matéria escolhida (primeira vez), seleciona a primeira automaticamente
+  if(filtroMateriaMaterial==='Todas' && materias.length>1){
+    filtroMateriaMaterial = materias[1];
+  }
+  document.getElementById('sel-materia-material').value = filtroMateriaMaterial;
+
   document.getElementById('sel-materia-material').addEventListener('change', (e)=>{
     filtroMateriaMaterial = e.target.value;
+    topicoSelecionadoMaterial = null;
     render();
   });
 
-  const listaEl = document.getElementById('lista-material');
-  lista.forEach(m=>{
-    const buscaYoutube = `https://www.youtube.com/results?search_query=${encodeURIComponent(m.assunto + ' aula concurso')}`;
-    const div = document.createElement('div');
-    div.className = 'card question-card';
-    div.innerHTML = `
+  const topicosMateria = materialTrilha.filter(m=>m.materia===filtroMateriaMaterial);
+
+  // Se o tópico selecionado não pertence mais à matéria atual, limpa a seleção
+  if(topicoSelecionadoMaterial && !topicosMateria.some(t=>t.assunto===topicoSelecionadoMaterial)){
+    topicoSelecionadoMaterial = null;
+  }
+  // Se nenhum tópico selecionado ainda, seleciona o primeiro da matéria automaticamente
+  if(!topicoSelecionadoMaterial && topicosMateria.length>0){
+    topicoSelecionadoMaterial = topicosMateria[0].assunto;
+  }
+
+  const listaTopicosEl = document.getElementById('lista-topicos-material');
+  listaTopicosEl.innerHTML = `
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 20px 0;">
+      ${topicosMateria.map(t=>`
+        <button class="btn-topico-material ${t.assunto===topicoSelecionadoMaterial?'active':''}" data-assunto="${t.assunto.replace(/"/g,'&quot;')}"
+          style="padding:9px 16px; border-radius:20px; border:1.5px solid ${t.assunto===topicoSelecionadoMaterial?'var(--board)':'var(--board-line)'}; background:${t.assunto===topicoSelecionadoMaterial?'var(--board)':'var(--paper)'}; color:${t.assunto===topicoSelecionadoMaterial?'#fff':'var(--ink)'}; font-size:0.85rem; font-weight:600; cursor:pointer; transition:all 0.15s;">
+          ${t.assunto}
+        </button>
+      `).join('')}
+    </div>
+  `;
+  listaTopicosEl.querySelectorAll('.btn-topico-material').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      topicoSelecionadoMaterial = btn.dataset.assunto;
+      render();
+    });
+  });
+
+  const materialEl = document.getElementById('material-topico-selecionado');
+  const m = topicosMateria.find(t=>t.assunto===topicoSelecionadoMaterial);
+  if(!m){
+    materialEl.innerHTML = `<p style="color:var(--ink-soft);">Nenhum tópico cadastrado ainda para esta disciplina.</p>`;
+    return;
+  }
+  const buscaYoutube = `https://www.youtube.com/results?search_query=${encodeURIComponent(m.assunto + ' aula concurso')}`;
+  materialEl.innerHTML = `
+    <div class="card question-card">
       <span class="tag">${m.materia} · ${m.assunto}</span>
       <p style="line-height:1.6; margin:0 0 12px 0;">${m.resumo}</p>
       ${m.aprofundamento ? `<p style="line-height:1.65; margin:0 0 14px 0; color:var(--ink-soft); font-size:0.92rem; padding:12px 14px; background:var(--paper-dim); border-left:3px solid var(--chalk-yellow); border-radius:4px;"><strong style="color:var(--ink);">Aprofundando:</strong> ${m.aprofundamento}</p>` : ''}
@@ -1158,9 +1200,8 @@ function renderMaterial(main){
       <a href="${buscaYoutube}" target="_blank" rel="noopener" class="btn secondary" style="text-decoration:none; display:inline-block;">
         🔎 Buscar videoaulas gratuitas sobre este assunto
       </a>
-    `;
-    listaEl.appendChild(div);
-  });
+    </div>
+  `;
 }
 
 /* ---------- MAPAS MENTAIS (gerados a partir do Material de Estudo) ---------- */
