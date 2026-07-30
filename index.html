@@ -377,6 +377,7 @@
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@11/marked.min.js"></script>
 </head>
 <body>
 
@@ -2305,8 +2306,104 @@ function renderMaterial(main){
       <a href="${buscaYoutube}" target="_blank" rel="noopener" class="btn secondary" style="text-decoration:none; display:inline-block;">
         🔎 Buscar videoaulas gratuitas sobre este assunto
       </a>
+      <button class="btn" id="btn-ver-aprofundamento" style="margin-left:10px;">📚 Ver Aprofundamento Completo + Questionário</button>
     </div>
+    <div id="aprofundamento-completo-container"></div>
   `;
+
+  document.getElementById('btn-ver-aprofundamento').addEventListener('click', ()=>{
+    carregarAprofundamentoETopico(m.trilha, m.materia, m.assunto);
+  });
+}
+
+/* ---------- APROFUNDAMENTO COMPLETO + QUESTIONÁRIO POR TÓPICO ---------- */
+let CACHE_APROFUNDAMENTO = {}; // chave: trilha|materia|assunto -> {conteudo_md, questoes}
+let respostasQuizTopico = {}; // controla o que já foi respondido na sessão atual
+
+async function carregarAprofundamentoETopico(trilha, materia, assunto){
+  const container = document.getElementById('aprofundamento-completo-container');
+  const chave = `${trilha}|${materia}|${assunto}`;
+  container.innerHTML = `<div class="card"><p class="loading-dots">Carregando aprofundamento e questionário...</p></div>`;
+
+  if(!CACHE_APROFUNDAMENTO[chave]){
+    try{
+      const { data: conteudoData } = await sb.from('conteudo_profundo').select('conteudo_md')
+        .eq('trilha', trilha).eq('materia', materia).eq('assunto', assunto).maybeSingle();
+      const { data: questoesData } = await sb.from('questoes_topico').select('*')
+        .eq('trilha', trilha).eq('materia', materia).eq('assunto', assunto).limit(10);
+      CACHE_APROFUNDAMENTO[chave] = {
+        conteudo_md: conteudoData ? conteudoData.conteudo_md : null,
+        questoes: questoesData || []
+      };
+    }catch(e){
+      console.error('Erro ao carregar aprofundamento', e);
+      container.innerHTML = `<div class="card"><p class="empty-note">Não foi possível carregar o aprofundamento agora. Tenta novamente em instantes.</p></div>`;
+      return;
+    }
+  }
+
+  const { conteudo_md, questoes } = CACHE_APROFUNDAMENTO[chave];
+
+  if(!conteudo_md && questoes.length===0){
+    container.innerHTML = `<div class="card"><p class="empty-note">O aprofundamento completo deste tópico ainda está sendo produzido. Volte em breve!</p></div>`;
+    return;
+  }
+
+  let html = '';
+  if(conteudo_md){
+    const htmlRenderizado = window.marked ? window.marked.parse(conteudo_md) : conteudo_md;
+    html += `<div class="card" style="line-height:1.7;">
+      <h3>📚 Aprofundamento Completo</h3>
+      <div class="conteudo-profundo-render">${htmlRenderizado}</div>
+    </div>`;
+  }
+  if(questoes.length>0){
+    html += `<div class="card">
+      <h3>📝 Questionário do Tópico (${questoes.length} questões)</h3>
+      <div id="lista-questoes-topico"></div>
+    </div>`;
+  }
+  container.innerHTML = html;
+
+  if(questoes.length>0){
+    const listaEl = document.getElementById('lista-questoes-topico');
+    questoes.forEach((q, idx)=>{
+      const qId = q.id;
+      const div = document.createElement('div');
+      div.className = 'card question-card';
+      div.style.marginBottom = '14px';
+      const alternativas = {A:q.alt_a, B:q.alt_b, C:q.alt_c, D:q.alt_d};
+      if(q.alt_e) alternativas.E = q.alt_e;
+      div.innerHTML = `
+        <span class="tag">Questão ${idx+1} de ${questoes.length}</span>
+        <div class="question-text">${q.enunciado}</div>
+        <div class="opcoes"></div>
+        <div class="explicacao-questao" style="display:none; margin-top:12px; padding:12px 14px; background:var(--paper-dim); border-left:3px solid var(--chalk-yellow); border-radius:4px; font-size:0.9rem; line-height:1.6;"></div>
+      `;
+      const opcoesDiv = div.querySelector('.opcoes');
+      const explicacaoDiv = div.querySelector('.explicacao-questao');
+      Object.entries(alternativas).forEach(([letra, texto])=>{
+        const opt = document.createElement('div');
+        opt.className = 'opt';
+        opt.innerHTML = `<span class="opt-letter">${letra})</span><span>${texto}</span>`;
+        opt.addEventListener('click', ()=>{
+          if(respostasQuizTopico[qId]) return; // já respondida
+          respostasQuizTopico[qId] = letra;
+          opcoesDiv.querySelectorAll('.opt').forEach(o=>o.style.pointerEvents='none');
+          opcoesDiv.querySelectorAll('.opt').forEach((o,i)=>{
+            const letraOpt = Object.keys(alternativas)[i];
+            if(letraOpt===q.correta) o.classList.add('correct');
+            if(letraOpt===letra && letra!==q.correta) o.classList.add('wrong');
+          });
+          explicacaoDiv.style.display = 'block';
+          const acertou = letra===q.correta;
+          explicacaoDiv.innerHTML = `<strong style="color:${acertou?'var(--ok-green)':'var(--clay-red)'};">${acertou?'✔ Você acertou! ':'✘ Resposta correta: '+q.correta+'. '}</strong>${q.explicacao}`;
+        });
+        opcoesDiv.appendChild(opt);
+      });
+      listaEl.appendChild(div);
+    });
+  }
 }
 
 /* ---------- MAPAS MENTAIS (gerados a partir do Material de Estudo) ---------- */
