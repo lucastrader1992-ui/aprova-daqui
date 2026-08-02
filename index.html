@@ -2332,7 +2332,7 @@ async function carregarAprofundamentoETopico(trilha, materia, assunto){
       if(erroConteudo) console.error('Erro Supabase (conteudo_profundo):', erroConteudo);
 
       const { data: questoesData, error: erroQuestoes } = await sb.from('questoes_topico').select('*')
-        .eq('trilha', trilha).eq('materia', materia).eq('assunto', assunto).limit(10);
+        .eq('trilha', trilha).eq('materia', materia).eq('assunto', assunto).limit(30);
       if(erroQuestoes) console.error('Erro Supabase (questoes_topico):', erroQuestoes);
 
       console.log('DEBUG aprofundamento — trilha/materia/assunto buscados:', trilha, materia, assunto);
