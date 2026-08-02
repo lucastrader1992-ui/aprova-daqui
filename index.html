@@ -2327,16 +2327,23 @@ async function carregarAprofundamentoETopico(trilha, materia, assunto){
 
   if(!CACHE_APROFUNDAMENTO[chave]){
     try{
-      const { data: conteudoData } = await sb.from('conteudo_profundo').select('conteudo_md')
+      const { data: conteudoData, error: erroConteudo } = await sb.from('conteudo_profundo').select('conteudo_md')
         .eq('trilha', trilha).eq('materia', materia).eq('assunto', assunto).maybeSingle();
-      const { data: questoesData } = await sb.from('questoes_topico').select('*')
+      if(erroConteudo) console.error('Erro Supabase (conteudo_profundo):', erroConteudo);
+
+      const { data: questoesData, error: erroQuestoes } = await sb.from('questoes_topico').select('*')
         .eq('trilha', trilha).eq('materia', materia).eq('assunto', assunto).limit(10);
+      if(erroQuestoes) console.error('Erro Supabase (questoes_topico):', erroQuestoes);
+
+      console.log('DEBUG aprofundamento — trilha/materia/assunto buscados:', trilha, materia, assunto);
+      console.log('DEBUG aprofundamento — conteudoData:', conteudoData, '| questoesData:', questoesData);
+
       CACHE_APROFUNDAMENTO[chave] = {
         conteudo_md: conteudoData ? conteudoData.conteudo_md : null,
         questoes: questoesData || []
       };
     }catch(e){
-      console.error('Erro ao carregar aprofundamento', e);
+      console.error('Erro ao carregar aprofundamento (exceção JS)', e);
       container.innerHTML = `<div class="card"><p class="empty-note">Não foi possível carregar o aprofundamento agora. Tenta novamente em instantes.</p></div>`;
       return;
     }
